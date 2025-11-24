@@ -170,20 +170,37 @@
 
 async function startCamera() {
   try {
-    // 1. Check current camera permission state
+    // 1. Check initial camera permission state
     const perm = await navigator.permissions.query({ name: "camera" });
     console.log("Initial camera permission state:", perm.state);
 
-    // 2. Add a small delay (helps with embedded Chromium timing)
+    // 2. Tiny delay for embedded Chromium stability
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // 3. Request video stream (this triggers the permission popup)
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    
-    // 4. Set the video source
+    // 3. Get selected resolution (default to simple video:true if missing)
+    const res = (myResolutionSelect?.value || "640x480").split("x");
+    const width = parseInt(res[0]);
+    const height = parseInt(res[1]);
+
+    const constraints = {
+      video: {
+        width: { ideal: width },
+        height: { ideal: height }
+      }
+    };
+
+    console.log("Requesting camera with constraints:", constraints);
+
+    // 4. Request video-only first (MOST reliable on UnoQ)
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    // 5. Display result
     document.getElementById("video").srcObject = stream;
 
-    // 5. Check the permission state again (should be "granted" if allowed)
+    // Save stream globally if needed
+    window.myCurrentStream = stream;
+
+    // 6. Check updated camera permission state
     const permAfter = await navigator.permissions.query({ name: "camera" });
     console.log("Camera permission state after request:", permAfter.state);
 
@@ -191,6 +208,7 @@ async function startCamera() {
     console.error("Camera error:", err);
   }
 }
+
 
       
         // --- Setup Functions ---
