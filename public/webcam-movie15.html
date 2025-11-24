@@ -56,7 +56,7 @@
         <input type="file" id="myUploadClipFile" accept="video/*" style="padding: 10px; border: 1px solid #007bff; border-radius: 5px;">
     </div>
 
-        <video id="myRecordedVideo" controls style="display: none; border: 2px solid green; max-width: 90%; margin-bottom: 20px;"></video>
+    <video id="myRecordedVideo" controls style="display: none; border: 2px solid green; max-width: 90%; margin-bottom: 20px;"></video>
 
     <div id="myTrimmingControls" style="display: none; max-width: 640px; margin: 0 auto 20px auto; padding: 15px; border: 2px solid #007bff; border-radius: 5px; background-color: #f0f8ff;">
         <h3 style="margin-top: 0;">Trim Video</h3>
@@ -119,10 +119,10 @@
     </div>
 
     <script>
-        // --- Global Variables (UPDATED to include myStartButton) ---
-        const myStartButton = document.getElementById('myStartButton'); // NEW
-        const myStartSection = document.getElementById('myStartSection'); // NEW
-        const myControls = document.getElementById('myControls'); // Get the controls div
+        // --- 1. Global Variables (Declarations) ---
+        const myStartButton = document.getElementById('myStartButton');
+        const myStartSection = document.getElementById('myStartSection');
+        const myControls = document.getElementById('myControls'); 
 
         const myLiveStreamVideo = document.getElementById('myLiveStreamVideo');
         const myVideoCanvas = document.getElementById('myVideoCanvas');
@@ -136,7 +136,6 @@
         const myDownloadLink = document.getElementById('myDownloadLink');
         const myCanvasContext = myVideoCanvas.getContext('2d');
 
-        // NEW: Upload button for clipping
         const myUploadClipFile = document.getElementById('myUploadClipFile'); 
 
         // Trimming elements
@@ -149,7 +148,7 @@
         const mySaveTrimmedButton = document.getElementById('mySaveTrimmedButton');
         const myCancelTrimButton = document.getElementById('myCancelTrimButton');
 
-        // Merging elements (omitted for brevity, assume they are included)
+        // Merging elements
         const myVideoFile1 = document.getElementById('myVideoFile1');
         const myVideoFile2 = document.getElementById('myVideoFile2');
         const myPreview1 = document.getElementById('myPreview1');
@@ -171,8 +170,65 @@
         let myVideoDuration = 0;
         let myVideo1Blob = null;
         let myVideo2Blob = null;  
+        let myAnimationFrameID = null;
+        let myIsPaused = false;
 
-        // --- Setup Functions (Mostly Unchanged) ---
+
+        // --- 2. Core Dependency Functions (Defined first to resolve ReferenceError) ---
+
+        function myStopCurrentStream() {
+            if (myCurrentStream) {
+                myCurrentStream.getTracks().forEach(track => track.stop());
+                myCurrentStream = null;
+            }
+            if (myAnimationFrameID) {
+                cancelAnimationFrame(myAnimationFrameID);
+                myAnimationFrameID = null;
+            }
+        }
+
+        function myDrawLoop() {
+            // Only draw if not paused and the video stream is active
+            if (!myIsPaused && myLiveStreamVideo.srcObject) {
+                myCanvasContext.drawImage(myLiveStreamVideo, 0, 0, myVideoCanvas.width, myVideoCanvas.height);
+            }
+            myAnimationFrameID = requestAnimationFrame(myDrawLoop);
+        }
+
+        async function myChangeCamera(deviceId) {
+            myStopCurrentStream(); // Stop any existing stream
+            
+            const mySelectedResolution = myResolutionSelect.value.split('x');
+            const myConstraints = {
+                video: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                    width: { exact: parseInt(mySelectedResolution[0]) },
+                    height: { exact: parseInt(mySelectedResolution[1]) }
+                },
+                audio: true
+            };
+
+            try {
+                myCurrentStream = await navigator.mediaDevices.getUserMedia(myConstraints);
+                myLiveStreamVideo.srcObject = myCurrentStream;
+                myLiveStreamVideo.onloadedmetadata = function() {
+                    myVideoCanvas.width = myLiveStreamVideo.videoWidth;
+                    myVideoCanvas.height = myLiveStreamVideo.videoHeight;
+                    myLiveStreamVideo.play();
+                    myDrawLoop();
+                    myPhotoButton.disabled = false;
+                    myRecordButton.disabled = false;
+                };
+            } catch (error) {
+                console.error("Error accessing media devices: ", error);
+                alert("Could not access the camera. Check permissions and device availability.");
+                myPhotoButton.disabled = true;
+                myRecordButton.disabled = true;
+            }
+        }
+
+
+        // --- 3. Setup Functions (Unchanged Logic, just placed higher) ---
 
         function myLoadResolutionPresets() {
             const myResolutionPresets = [
@@ -219,7 +275,7 @@
             }
         }
 
-        // RENAMED/MODIFIED: This function now requests permission and populates the select box
+        // --- 4. NEW Startup Function tied to the button ---
         async function myRequestMediaPermissionAndSetupCameras() {
             // Disable button and show loading state
             myStartButton.disabled = true;
@@ -269,30 +325,463 @@
             }
         }
 
-        // (The rest of the JS functions, like myChangeCamera, myDrawLoop, myTogglePause, etc., are unchanged)
+        // --- 5. Recording, Trimming, and Merging Functions (Unchanged from original logic) ---
 
-        // The remaining functions (myStopCurrentStream, myChangeCamera, myDrawLoop, myTogglePause, myTakePhoto, myToggleRecording, myStartRecording, myStopRecording, myHandleRecordingStop, mySetDownloadLink, mySetRecordedVideoForTrimming, myUploadClipFile.onchange, mySetupTrimmingControls, myUpdateTrimmingDisplay, myTrimAndSaveVideo, myTrimVideoWithAudio, myCancelTrimming, myUpdateVideoInfo, myLoadFFmpeg, myVideoFile1.onchange, myVideoFile2.onchange, myCheckMergeReady, myMergeButton.onclick, myMergeTwoVideos) are assumed to be in the code block and remain functional.
+        function mySetDownloadLink(blob, prefix) {
+            const myURL = URL.createObjectURL(blob);
+            myDownloadLink.href = myURL;
+            myDownloadLink.download = prefix + Date.now() + '.webm';
+            myDownloadLink.textContent = 'Download Saved Video';
+            myDownloadLink.style.backgroundColor = '#28a745';
+        }
 
-        // --- Initial Setup and New Event Listener ---
+        function mySetRecordedVideoForTrimming(blob) {
+            myRecordedVideoBlob = blob;
+            myRecordedVideo.src = URL.createObjectURL(blob);
+            myRecordedVideo.style.display = 'block';
+            myRecordedVideo.onloadedmetadata = function() {
+                myVideoDuration = myRecordedVideo.duration;
+                mySetupTrimmingControls();
+            };
+        }
 
-        // 1. Load static elements (resolutions, formats) on page load.
+        myUploadClipFile.onchange = function(e) {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('video/')) {
+                mySetDownloadLink(file, 'uploaded_');
+                mySetRecordedVideoForTrimming(file);
+                myTrimmingControls.style.display = 'block';
+            } else {
+                alert("Please select a valid video file.");
+            }
+        };
+
+        function mySetupTrimmingControls() {
+            // Set max value of sliders to video duration
+            myStartSlider.max = myVideoDuration;
+            myEndSlider.max = myVideoDuration;
+
+            // Reset sliders to start/end of video
+            myStartSlider.value = 0;
+            myEndSlider.value = myVideoDuration;
+            
+            myUpdateTrimmingDisplay();
+        }
+
+        function myUpdateTrimmingDisplay() {
+            const startTime = parseFloat(myStartSlider.value);
+            const endTime = parseFloat(myEndSlider.value);
+            
+            // Ensure start time is before end time
+            if (startTime > endTime) {
+                myEndSlider.value = startTime;
+            }
+
+            const finalEndTime = parseFloat(myEndSlider.value);
+            const duration = finalEndTime - startTime;
+
+            myStartTimeDisplay.textContent = startTime.toFixed(1) + 's';
+            myEndTimeDisplay.textContent = finalEndTime.toFixed(1) + 's';
+            myDurationDisplay.textContent = duration.toFixed(1) + 's';
+            
+            // Update video player to current start time for preview
+            myRecordedVideo.currentTime = startTime;
+        }
+
+        // Add event listeners for the sliders
+        myStartSlider.addEventListener('input', myUpdateTrimmingDisplay);
+        myEndSlider.addEventListener('input', myUpdateTrimmingDisplay);
+
+        mySaveTrimmedButton.onclick = async function() {
+            mySaveTrimmedButton.disabled = true;
+            const startTime = parseFloat(myStartSlider.value);
+            const endTime = parseFloat(myEndSlider.value);
+            
+            if (endTime <= startTime || !myRecordedVideoBlob) {
+                alert("Invalid trim selection.");
+                mySaveTrimmedButton.disabled = false;
+                return;
+            }
+            
+            myDownloadLink.textContent = 'Processing Trim...';
+            myDownloadLink.style.backgroundColor = '#ffc107';
+
+            try {
+                const trimmedBlob = await myTrimVideoWithAudio(myRecordedVideoBlob, startTime, endTime);
+                mySetDownloadLink(trimmedBlob, 'trimmed_video_');
+                mySetRecordedVideoForTrimming(trimmedBlob); // Load trimmed video into the player
+                myTrimmingControls.style.display = 'none';
+            } catch (error) {
+                console.error("Trimming failed:", error);
+                alert("Video trimming failed. See console for details.");
+            }
+            
+            mySaveTrimmedButton.disabled = false;
+        };
+
+        async function myTrimVideoWithAudio(videoBlob, startTime, endTime) {
+            return new Promise(function(resolve, reject) {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(videoBlob);
+                video.muted = false;
+                
+                video.onloadedmetadata = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    
+                    const stream = canvas.captureStream(30);
+                    
+                    const audioContext = new AudioContext();
+                    const source = audioContext.createMediaElementSource(video);
+                    const destination = audioContext.createMediaStreamDestination();
+                    source.connect(destination);
+                    
+                    const audioTrack = destination.stream.getAudioTracks()[0];
+                    if (audioTrack) {
+                        stream.addTrack(audioTrack);
+                    }
+                    
+                    const recorder = new MediaRecorder(stream, {
+                        mimeType: 'video/webm;codecs=vp8,opus',
+                        audioBitsPerSecond: 128000,
+                        videoBitsPerSecond: 2500000
+                    });
+                    
+                    const chunks = [];
+                    recorder.ondataavailable = function(e) {
+                        if (e.data.size > 0) chunks.push(e.data);
+                    };
+                    
+                    recorder.onstop = function() {
+                        audioContext.close();
+                        resolve(new Blob(chunks, { type: 'video/webm' }));
+                    };
+                    
+                    video.currentTime = startTime;
+                    video.play();
+                    recorder.start();
+                    
+                    const drawFrame = function() {
+                        if (video.currentTime >= endTime || video.ended) {
+                            recorder.stop();
+                            video.pause();
+                        } else {
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            requestAnimationFrame(drawFrame);
+                        }
+                    };
+                    
+                    video.onseeked = function() {
+                        drawFrame();
+                    };
+                };
+            });
+        }
+
+        function myCancelTrimming() {
+            myTrimmingControls.style.display = 'none';
+            
+            // Reset the download link and video player to the full recorded/uploaded video blob
+            if (myRecordedVideoBlob) {
+                mySetDownloadLink(myRecordedVideoBlob, 'full_video_');
+                myRecordedVideo.src = URL.createObjectURL(myRecordedVideoBlob);
+            } else {
+                // Fallback for when there's no recording/upload
+                myRecordedVideo.style.display = 'none';
+                myDownloadLink.href = '#';
+                myDownloadLink.textContent = 'Download Video';
+                myDownloadLink.style.backgroundColor = '#6c757d';
+            }
+        }
+
+        function myTakePhoto() {
+            // Draw the current frame to the canvas
+            myCanvasContext.drawImage(myLiveStreamVideo, 0, 0, myVideoCanvas.width, myVideoCanvas.height);
+            
+            // Convert canvas to a Blob (image)
+            myVideoCanvas.toBlob(function(blob) {
+                const myURL = URL.createObjectURL(blob);
+                
+                // Set up a temporary link for the image download
+                const myTempLink = document.createElement('a');
+                myTempLink.href = myURL;
+                myTempLink.download = 'photo_' + Date.now() + '.png';
+                document.body.appendChild(myTempLink);
+                myTempLink.click();
+                document.body.removeChild(myTempLink);
+                
+                // Clean up the URL object
+                URL.revokeObjectURL(myURL);
+            }, 'image/png');
+        }
+
+        function myStartRecording() {
+            myRecordedChunks = [];
+            myIsRecording = true;
+            
+            // Get the current stream from the video element
+            const myStream = myLiveStreamVideo.srcObject;
+            const myMimeType = myFormatSelect.value;
+            
+            try {
+                myMediaRecorder = new MediaRecorder(myStream, { mimeType: myMimeType });
+            } catch (error) {
+                console.error("MediaRecorder failed to initialize:", error);
+                alert("Recording failed: The selected format may not be supported.");
+                myIsRecording = false;
+                myToggleRecording(); // Reset button state
+                return;
+            }
+            
+            myMediaRecorder.ondataavailable = function(e) {
+                if (e.data.size > 0) myRecordedChunks.push(e.data);
+            };
+
+            myMediaRecorder.onstop = myHandleRecordingStop;
+            myMediaRecorder.start(100); // Collect data in 100ms chunks
+            
+            myRecordButton.textContent = '⏹️ Stop Recording';
+            myRecordButton.style.backgroundColor = '#dc3545'; // Red
+            myPauseButton.disabled = false;
+            myPauseButton.textContent = '⏸️ Pause';
+        }
+
+        function myStopRecording() {
+            myIsRecording = false;
+            if (myMediaRecorder && myMediaRecorder.state !== 'inactive') {
+                myMediaRecorder.stop();
+            }
+            myRecordButton.textContent = '🔴 Start Recording';
+            myRecordButton.style.backgroundColor = '#28a745'; // Green
+            myPauseButton.disabled = true;
+        }
+
+        function myHandleRecordingStop() {
+            if (myRecordedChunks.length === 0) {
+                alert("Recording was empty.");
+                return;
+            }
+            
+            const myRecordedBlob = new Blob(myRecordedChunks, { type: myMediaRecorder.mimeType });
+            mySetDownloadLink(myRecordedBlob, 'recorded_video_');
+            mySetRecordedVideoForTrimming(myRecordedBlob);
+            myTrimmingControls.style.display = 'block';
+        }
+
+        function myToggleRecording() {
+            if (myIsRecording) {
+                myStopRecording();
+            } else {
+                myStartRecording();
+            }
+        }
+
+        function myTogglePause() {
+            if (!myMediaRecorder) return;
+            
+            if (myMediaRecorder.state === 'recording') {
+                myMediaRecorder.pause();
+                myIsPaused = true;
+                myPauseButton.textContent = '▶️ Resume';
+                myPauseButton.style.backgroundColor = '#28a745';
+            } else if (myMediaRecorder.state === 'paused') {
+                myMediaRecorder.resume();
+                myIsPaused = false;
+                myPauseButton.textContent = '⏸️ Pause';
+                myPauseButton.style.backgroundColor = '#17a2b8';
+            }
+        }
+
+        // --- Video Merging Functions ---
+
+        myVideoFile1.onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                myVideo1Blob = file;
+                myPreview1.src = URL.createObjectURL(file);
+                myPreview1.style.display = 'block';
+                myPreview1.onloadedmetadata = function() {
+                    myVideo1Info.textContent = 'Duration: ' + myPreview1.duration.toFixed(1) + 's';
+                    myCheckMergeReady();
+                };
+            }
+        };
+
+        myVideoFile2.onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                myVideo2Blob = file;
+                myPreview2.src = URL.createObjectURL(file);
+                myPreview2.style.display = 'block';
+                myPreview2.onloadedmetadata = function() {
+                    myVideo2Info.textContent = 'Duration: ' + myPreview2.duration.toFixed(1) + 's';
+                    myCheckMergeReady();
+                };
+            }
+        };
+
+        function myCheckMergeReady() {
+            if (myVideo1Blob && myVideo2Blob) {
+                myMergeButton.disabled = false;
+            }
+        }
+
+        myMergeButton.onclick = async function() {
+            myMergeButton.disabled = true;
+            myMergeProgress.style.display = 'block';
+            myProgressBar.style.width = '0%';
+            
+            try {
+                const mergedBlob = await myMergeTwoVideos(myVideo1Blob, myVideo2Blob);
+                
+                myProgressBar.style.width = '100%';
+                
+                myMergedVideo.src = URL.createObjectURL(mergedBlob);
+                myMergedVideo.style.display = 'block';
+                
+                myMergedDownloadLink.href = myMergedVideo.src;
+                myMergedDownloadLink.download = 'merged_video_' + Date.now() + '.webm';
+                myMergedDownloadLink.style.display = 'inline-block';
+                
+                setTimeout(function() {
+                    myMergeProgress.style.display = 'none';
+                    myMergeButton.disabled = false;
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error merging videos:', error);
+                myMergeProgress.style.display = 'none';
+                myMergeButton.disabled = false;
+            }
+        };
+
+        async function myMergeTwoVideos(blob1, blob2) {
+            return new Promise(function(resolve, reject) {
+                const video1 = document.createElement('video');
+                const video2 = document.createElement('video');
+                
+                video1.src = URL.createObjectURL(blob1);
+                video2.src = URL.createObjectURL(blob2);
+                video1.muted = false;
+                video2.muted = false;
+                
+                let video1Ready = false;
+                let video2Ready = false;
+                
+                video1.onloadedmetadata = function() {
+                    video1Ready = true;
+                    if (video2Ready) startMerge();
+                };
+                
+                video2.onloadedmetadata = function() {
+                    video2Ready = true;
+                    if (video1Ready) startMerge();
+                };
+                
+                function startMerge() {
+                    const width = Math.max(video1.videoWidth, video2.videoWidth);
+                    const height = Math.max(video1.videoHeight, video2.videoHeight);
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    const stream = canvas.captureStream(30);
+                    
+                    const audioContext = new AudioContext();
+                    
+                    const recorder = new MediaRecorder(stream, {
+                        mimeType: 'video/webm;codecs=vp8,opus',
+                        audioBitsPerSecond: 128000,
+                        videoBitsPerSecond: 2500000
+                    });
+                    
+                    const chunks = [];
+                    recorder.ondataavailable = function(e) {
+                        if (e.data.size > 0) chunks.push(e.data);
+                    };
+                    
+                    recorder.onstop = function() {
+                        audioContext.close();
+                        resolve(new Blob(chunks, { type: 'video/webm' }));
+                    };
+                    
+                    let currentVideo = video1;
+                    let isFirstVideo = true;
+                    
+                    const source1 = audioContext.createMediaElementSource(video1);
+                    const source2 = audioContext.createMediaElementSource(video2);
+                    const destination = audioContext.createMediaStreamDestination();
+                    
+                    source1.connect(destination);
+                    source2.connect(destination);
+                    
+                    const audioTrack = destination.stream.getAudioTracks()[0];
+                    if (audioTrack) {
+                        stream.addTrack(audioTrack);
+                    }
+                    
+                    recorder.start();
+                    video1.play();
+                    
+                    myProgressBar.style.width = '20%';
+                    
+                    const drawFrame = function() {
+                        ctx.drawImage(currentVideo, 0, 0, width, height);
+                        
+                        if (currentVideo.ended) {
+                            if (isFirstVideo) {
+                                isFirstVideo = false;
+                                currentVideo = video2;
+                                video2.play();
+                                myProgressBar.style.width = '60%';
+                                requestAnimationFrame(drawFrame);
+                            } else {
+                                recorder.stop();
+                                video1.pause();
+                                video2.pause();
+                            }
+                        } else {
+                            requestAnimationFrame(drawFrame);
+                        }
+                    };
+                    
+                    drawFrame();
+                }
+            });
+        }
+
+        // --- 6. Initialization on Page Load & Event Listeners ---
+
         myLoadResolutionPresets();
         myLoadSupportedFormats();
-        
-        // 2. DO NOT CALL myGetCameras() on load!
+        
+        // Initial setup for the main download link (always visible, but initially disabled/grey)
+        myDownloadLink.textContent = 'Ready for action';
+        myDownloadLink.href = '#';
+        myDownloadLink.style.backgroundColor = '#6c757d';
 
-        // 3. Set up the new Start Button listener
+
+        // Event listeners
+        // NEW: This triggers the camera setup and permission prompt
         myStartButton.addEventListener('click', myRequestMediaPermissionAndSetupCameras);
 
-        // 4. Set up existing event listeners for controls (after they become visible)
-        myCameraSelect.addEventListener('change', (e) => myChangeCamera(e.target.value));
-        myResolutionSelect.addEventListener('change', (e) => myChangeCamera(myCameraSelect.value));
-        myPhotoButton.addEventListener('click', myTakePhoto);
-        myRecordButton.addEventListener('click', myToggleRecording);
-        myPauseButton.addEventListener('click', myTogglePause);
+        // These events are ready to go once the camera is started and controls are visible
+        myCameraSelect.onchange = function() {
+            myChangeCamera(this.value);
+        };
 
-        // Optional: Pre-load FFmpeg in the background
-        // myLoadFFmpeg().catch(err => console.log("FFmpeg failed to pre-load:", err));
+        myResolutionSelect.onchange = function() {
+            myChangeCamera(myCameraSelect.value);
+        };
+
+        myPhotoButton.onclick = myTakePhoto;
+        myRecordButton.onclick = myToggleRecording;
+        myPauseButton.onclick = myTogglePause;
+        myCancelTrimButton.onclick = myCancelTrimming;
 
     </script>
 </body>
