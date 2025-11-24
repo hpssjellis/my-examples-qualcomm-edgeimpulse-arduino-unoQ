@@ -42,10 +42,7 @@
               <button id="myPauseButton" style="padding: 10px 20px; background-color: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;" disabled>
             ⏸️ Pause
         </button>
-
-          <button id="myAllowButton" style="padding: 10px 20px; background-color: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;" disabled onClick="myGetCameras()">
-            Activate Camera
-        </button>
+        
         <a id="myDownloadLink" style="display: inline-block; padding: 10px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px;">Download Video</a>
     </div>
     
@@ -127,7 +124,6 @@
         const myPhotoButton = document.getElementById('myPhotoButton');
         const myRecordButton = document.getElementById('myRecordButton');
         const myPauseButton = document.getElementById('myPauseButton');
-        const myAllowButton = document.getElementById('myAllowButton');
         const myDownloadLink = document.getElementById('myDownloadLink');
         const myCanvasContext = myVideoCanvas.getContext('2d');
 
@@ -168,49 +164,6 @@
      //   let myIsPaused = false;
     //   let myAnimationFrameId = null;
 
-async function startCamera() {
-  try {
-    // 1. Check initial camera permission state
-    const perm = await navigator.permissions.query({ name: "camera" });
-    console.log("Initial camera permission state:", perm.state);
-
-    // 2. Tiny delay for embedded Chromium stability
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // 3. Get selected resolution (default to simple video:true if missing)
-    const res = (myResolutionSelect?.value || "640x480").split("x");
-    const width = parseInt(res[0]);
-    const height = parseInt(res[1]);
-
-    const constraints = {
-      video: {
-        width: { ideal: width },
-        height: { ideal: height }
-      }
-    };
-
-    console.log("Requesting camera with constraints:", constraints);
-
-    // 4. Request video-only first (MOST reliable on UnoQ)
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    // 5. Display result
-    document.getElementById("video").srcObject = stream;
-
-    // Save stream globally if needed
-    window.myCurrentStream = stream;
-
-    // 6. Check updated camera permission state
-    const permAfter = await navigator.permissions.query({ name: "camera" });
-    console.log("Camera permission state after request:", permAfter.state);
-
-  } catch (err) {
-    console.error("Camera error:", err);
-  }
-}
-
-
-      
         // --- Setup Functions ---
 
         function myLoadResolutionPresets() {
@@ -336,7 +289,6 @@ async function startCamera() {
                     myVideoCanvas.style.display = 'block'; // Ensure canvas is visible for live view
                     myPhotoButton.disabled = false;
                     myRecordButton.disabled = false;                   
-                    myAllowButton.disabled = false;                 
                     myPauseButton.disabled = false;
                     myPauseButton.textContent = '⏸️ Pause';
                     myPauseButton.style.backgroundColor = '#17a2b8';
