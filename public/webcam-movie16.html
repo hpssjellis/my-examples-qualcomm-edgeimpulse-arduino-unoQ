@@ -276,54 +276,95 @@
         }
 
         // --- 4. NEW Startup Function tied to the button ---
-        async function myRequestMediaPermissionAndSetupCameras() {
-            // Disable button and show loading state
-            myStartButton.disabled = true;
-            myStartButton.textContent = '⏳ Loading Cameras...';
-            myCameraSelect.innerHTML = '<option>Searching...</option>';
-            
-            // Step 1: Request permission (this triggers the browser prompt)
-            try {
-                // Request a temporary stream to trigger permission and enable device enumeration
-                const myTempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                myTempStream.getTracks().forEach(track => track.stop()); // Stop the temp stream immediately
-                
-                // Step 2: Enumerate devices now that permission is granted
-                const myDevices = await navigator.mediaDevices.enumerateDevices();
-                myCameraSelect.innerHTML = '';
-                let myCameraCount = 0;
-                let defaultDeviceId = null;
 
-                for (const myDevice of myDevices) {
-                    if (myDevice.kind === 'videoinput') {
-                        const myOption = document.createElement('option');
-                        myOption.value = myDevice.deviceId;
-                        myOption.textContent = myDevice.label || 'Camera ' + (++myCameraCount); 
-                        myCameraSelect.appendChild(myOption);
-                        if (!defaultDeviceId) defaultDeviceId = myDevice.deviceId;
-                        myCameraCount++;
-                    }
-                }
 
-                // Step 3: Start streaming the default camera and show controls
-                if (defaultDeviceId) {
-                    myChangeCamera(defaultDeviceId); // Start the stream
-                    myStartSection.style.display = 'none';
-                    myControls.style.display = 'flex';
-                } else {
-                    myCameraSelect.innerHTML = '<option>No Cameras Found</option>';
-                    myStartButton.textContent = '❌ No Cameras Found';
-                    myStartButton.style.backgroundColor = '#dc3545';
-                }
+async function myRequestMediaPermissionAndSetupCameras() {
+    // ... (Your existing button disabling code)
+    myStartButton.disabled = true;
+    myStartButton.textContent = '⏳ Requesting Permission...';
 
-            } catch (error) {
-                console.error("Error enumerating devices or permission denied:", error);
-                myCameraSelect.innerHTML = '<option>Permission Denied</option>';
-                myStartButton.textContent = '🛑 Permission Denied. Click to try again.';
-                myStartButton.style.backgroundColor = '#ffc107';
-                myStartButton.disabled = false;
-            }
-        }
+    // The most basic, flexible constraint
+    const constraints = {
+        video: true,
+        audio: true 
+    };
+
+    try {
+        // Attempt to get the stream
+        const myTempStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // Success (No Permission Denied)
+        myTempStream.getTracks().forEach(track => track.stop()); 
+        console.log("SUCCESS: Permission granted and stream obtained.");
+
+        // Now proceed to enumerate and set up as before
+        await mySetupCamerasAfterPermission(); // A new function we'll define below
+
+    } catch (error) {
+        // FAILURE: Log the exact error details
+        console.error("CRITICAL GETUSERMEDIA ERROR DETAILS:", error);
+        console.error(`Error Name: ${error.name}, Message: ${error.message}`);
+        
+        if (error.name === 'NotAllowedError') {
+            alert("Permission was denied by the user or system. Check browser settings.");
+            myStartButton.textContent = '🛑 Permission Denied. Check your settings!';
+        } else if (error.name === 'NotFoundError') {
+            alert("No camera/microphone found on this device.");
+            myStartButton.textContent = '❌ No Camera Found.';
+        } else if (error.name === 'NotReadableError') {
+            alert("Camera is in use by another app or driver is unavailable.");
+            myStartButton.textContent = '⚠️ Camera in Use.';
+        } else {
+            alert(`Unknown Media Error: ${error.name}. See console for details.`);
+            myStartButton.textContent = '❌ Media Error.';
+        }
+        myStartButton.style.backgroundColor = '#dc3545';
+        myStartButton.disabled = false;
+    }
+}
+
+// You need to wrap the rest of your setup logic into a new function
+async function mySetupCamerasAfterPermission() {
+    // This is where you put the logic that runs AFTER permission is confirmed,
+    // including enumerateDevices() and starting the stream.
+    try {
+        const myDevices = await navigator.mediaDevices.enumerateDevices();
+        // ... (The rest of your code for filling the select box and calling myChangeCamera)
+        // This is what was previously inside the try block of your old function.
+
+        // Example start of previous setup logic:
+        const myCameraSelect = document.getElementById('myCameraSelect');
+        myCameraSelect.innerHTML = '';
+        let defaultDeviceId = null;
+        let myCameraCount = 0;
+
+        for (const myDevice of myDevices) {
+            if (myDevice.kind === 'videoinput') {
+                const myOption = document.createElement('option');
+                myOption.value = myDevice.deviceId;
+                myOption.textContent = myDevice.label || 'Camera ' + (++myCameraCount); 
+                myCameraSelect.appendChild(myOption);
+                if (!defaultDeviceId) defaultDeviceId = myDevice.deviceId;
+                myCameraCount++;
+            }
+        }
+        
+        if (defaultDeviceId) {
+            myChangeCamera(defaultDeviceId);
+            document.getElementById('myStartSection').style.display = 'none';
+            document.getElementById('myControls').style.display = 'flex';
+        } else {
+            // Handle no cameras found
+            myStartButton.textContent = '❌ No Cameras Found (Post Enum)';
+            document.getElementById('myStartButton').style.backgroundColor = '#dc3545';
+        }
+
+    } catch (error) {
+        console.error("ENUMERATE DEVICES FAILED:", error);
+        alert("Camera enumeration failed. Device list is likely inaccessible.");
+    }
+}
+        
 
         // --- 5. Recording, Trimming, and Merging Functions (Unchanged from original logic) ---
 
